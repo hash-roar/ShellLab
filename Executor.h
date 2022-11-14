@@ -44,6 +44,12 @@ class Executor {
   // Wait for foreground job
   void WaitForeground(pid_t pid);
 
+  // do bg command
+  void DoBgCmd(char **argv);
+
+  // do fg command
+  void DoFgCmd(char **argv);
+
  private:
   Jobs jobs_;
   volatile std::atomic<pid_t> wait_pid_{0};

@@ -1,5 +1,6 @@
 #include "Executor.h"
 
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -11,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -40,8 +42,8 @@ void SigchldHandler(int signum) {
       char words[128];
       auto job = g_jobs->GetJobByPid(pid);
       if (!job) return;  // error here
-      int n = sprintf(words, "Job [%d] (%d) terminated by signal %d\n",
-                      job->jid, job->pid, sig_num);
+      int n = sprintf(words, "Job [%d] (%d) stopped by signal %d\n", job->jid,
+                      job->pid, sig_num);
       write(1, words, n);
     }
     g_jobs->Delete(pid);
@@ -60,7 +62,23 @@ void SigintHandler(int signum) {
   return;
 }
 
-void SigtstpHandler(int signum) { return; }
+void SigtstpHandler(int signum) {
+  auto front_job = g_jobs->FrontJob();
+  if (!front_job) return;
+  pid_t pgid = getpgid(front_job->pid);
+  kill(-pgid, SIGTSTP);
+  // handle job
+  front_job->state = Job::STOP;
+  // print message
+  char words[128];
+  int n = sprintf(words, "Job [%d] (%d) terminated by signal %d\n",
+                  front_job->jid, front_job->pid, signum);
+  write(1, words, n);
+  pid_t dummy{front_job->pid};
+  // not wait foreground job anymore
+  g_pid->compare_exchange_strong(dummy, 0);
+  return;
+}
 
 void SigquitHandler(int signum) {
   printf("Terminating after receipt of SIGQUIT signal\n");
@@ -180,16 +198,89 @@ bool Executor::RunBuiltinCmd(char** argv) {
   if (command == "quit") {
     std::exit(1);
   } else if (command == "bg") {
-    std::cout << command << "\n";
+    DoBgCmd(argv);
     return true;
   } else if (command == "fg") {
-    std::cout << command << "\n";
+    DoFgCmd(argv);
     return true;
   } else if (command == "jobs") {
     jobs_.Print();
     return true;
   }
   return false;
+}
+
+void Executor::DoBgCmd(char** argv) {
+  // validate argument
+  if (argv[1] == nullptr) {
+    printf("not enough argument");
+    return;
+  }
+  string id(argv[1]);
+  pid_t pid;
+  int jid;
+  bool is_jid;
+  if (*id.begin() == '%') {
+    is_jid = true;
+    jid = std::atoi(id.data() + 1);
+    if (jid == 0) {
+      printf("invalid jid: %s", argv[1]);
+      return;
+    }
+  } else {
+    is_jid = false;
+    pid = std::atoi(id.data());
+    if (pid == 0) {
+      printf("invalid jid: %s", argv[1]);
+      return;
+    }
+  }
+
+  // perform bg action
+  auto job = is_jid ? jobs_.GetJobByJid(jid) : jobs_.GetJobByPid(pid);
+  if (!job || job->state != Job::STOP) return;  // no target job
+
+  // activate job
+  job->state = Job::BACK;
+  pid_t pgid = getpgid(job->pid);
+  kill(pgid, SIGCONT);
+  printf("[%d] (%d) %s", job->jid, job->pid, job->cmd_str.c_str());
+}
+
+void Executor::DoFgCmd(char** argv) {
+  if (argv[1] == nullptr) {
+    printf("not enough argument");
+    return;
+  }
+  string id(argv[1]);
+  pid_t pid;
+  int jid;
+  bool is_jid;
+  if (*id.begin() == '%') {
+    is_jid = true;
+    jid = std::atoi(id.data() + 1);
+    if (jid == 0) {
+      printf("invalid jid: %s\n", argv[1]);
+      return;
+    }
+  } else {
+    is_jid = false;
+    pid = std::atoi(id.data());
+    if (pid == 0) {
+      printf("invalid pid: %s\n", argv[1]);
+      return;
+    }
+  }
+
+  // perform bg action
+  auto job = is_jid ? jobs_.GetJobByJid(jid) : jobs_.GetJobByPid(pid);
+  if (!job) return;  // no target job
+
+  // activate job
+  job->state = Job::FRONT;
+  auto pgid = getpgid(job->pid);
+  kill(pgid, SIGCONT);
+  WaitForeground(job->pid);
 }
 
 bool Executor::RunBinaryCmd(bool bg, char** argv) { return false; };
