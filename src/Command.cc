@@ -14,7 +14,10 @@
 const std::unordered_set<std::string> g_special{"&", "<", ">", "|", ">>"};
 namespace shell {
 bool Command::ParseCmd(const char *cmdline) {
-  tokens = split_str(cmdline, " ");
+  std::string copy_buffer(cmdline);
+  if (!copy_buffer.empty() && copy_buffer.back() == '\n')
+    *copy_buffer.rbegin() = ' ';
+  tokens = split_str(copy_buffer.data(), " ");
   if (!tokens.empty() && tokens.back() == "\n") {
     tokens.pop_back();
   }

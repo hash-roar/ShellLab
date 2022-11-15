@@ -1,5 +1,7 @@
 #include "Executor.h"
 
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -116,8 +118,6 @@ void Executor::Run() {
 }
 
 void Executor::EvalCmd(string_view buffer) {
-  string copy_buffer(buffer);
-
   bool is_bg = false;
   Command cmd{};
   if (!cmd.ParseCmd(buffer.data())) return;
@@ -138,6 +138,25 @@ void Executor::EvalCmd(string_view buffer) {
   pid = fork();
   if (pid < 0) UnixError("fork error");
   if (pid == 0) {
+    // io redirect
+    if (!cmd.iredifile.empty()) {
+      int fd = open(cmd.iredifile.c_str(), O_RDONLY);
+      if (fd < 0) {
+        PrintUnixError("error in open file ");
+        return;
+      }
+      dup2(fd, 0);
+    }
+    if (!cmd.oredifile.empty()) {
+      int flag = cmd.orditype == 1 ? O_TRUNC | O_WRONLY | O_CREAT
+                                   : O_APPEND | O_WRONLY | O_CREAT;
+      int fd = open(cmd.oredifile.c_str(), flag, S_IRWXU);
+      if (fd < 0) {
+        PrintUnixError("error in open file ");
+        return;
+      }
+      dup2(fd, 1);
+    }
     setpgid(0, 0);
     if (execve(argv[0], argv, environ) < 0) UnixError("execute error");
   }

@@ -1,3 +1,5 @@
+#include "Utils.h"
+
 #include <cerrno>
 #include <csignal>
 #include <cstdio>
@@ -5,8 +7,6 @@
 #include <cstring>
 #include <string>
 #include <vector>
-
-#include "Utils.h"
 
 namespace shell {
 void HandleError(std::string_view message) {
@@ -17,6 +17,10 @@ void HandleError(std::string_view message) {
 void UnixError(std::string_view message) {
   fprintf(stdout, "%s : %s\n", message.data(), strerror(errno));
   std::exit(1);
+}
+
+void PrintUnixError(std::string_view message) {
+  fprintf(stdout, "%s : %s\n", message.data(), strerror(errno));
 }
 
 SignalHandler* RegisterSignal(int signum, SignalHandler* handler) {
