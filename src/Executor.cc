@@ -18,6 +18,7 @@
 #include <string_view>
 #include <thread>
 
+#include "Command.h"
 #include "Jobs.h"
 #include "Utils.h"
 
@@ -116,10 +117,13 @@ void Executor::Run() {
 
 void Executor::EvalCmd(string_view buffer) {
   string copy_buffer(buffer);
-  char* argv[MAX_ARG_NUM] = {nullptr};
-  bool is_bg = false;
 
-  is_bg = ParseCmd(copy_buffer.data(), argv);
+  bool is_bg = false;
+  Command cmd{};
+  if (!cmd.ParseCmd(buffer.data())) return;
+
+  is_bg = cmd.is_bg;
+  char** argv = cmd.argv;
 
   if (argv[0] == nullptr) return;
 

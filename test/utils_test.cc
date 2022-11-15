@@ -6,7 +6,7 @@
 
 using namespace shell;
 
-TEST(UTIL_TEST, TEST_SPLIT) {
+TEST(UTIL_TEST, DISABLED_TEST_SPLIT) {
   // test basic
   auto basic = split_str("cm arg1 arg2", " ");
   for (auto &str : basic) {
@@ -31,8 +31,10 @@ TEST(UTIL_TEST, TEST_SPLIT) {
     std::cout << str << "\n";
   }
   // test corner
-  auto corner = split_str("ss fa ss dfdssdfd ", "ss");
+  auto corner = split_str("ss fa ss dfdssdfd \n\n", "ss");
   for (auto &str : corner) {
     std::cout << str << "\n";
   }
 }
+
+TEST(PRINT_TEST, TEST_PRINTSF) { PrintSf("hello: %s\n", "word"); }
